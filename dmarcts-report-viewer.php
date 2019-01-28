@@ -33,12 +33,13 @@
 //####################################################################
 
 function get_status_color($row) {
+
 	$status = "";
-	if (($row['dkimresult'] == "fail") && ($row['spfresult'] == "fail")) {
+	if (($row['item_dkim_result'] == "fail") && ($row['item_spf_result'] == "fail")) {
 		$status="red";
-	} elseif (($row['dkimresult'] == "fail") || ($row['spfresult'] == "fail")) {
+	} elseif (($row['item_dkim_result'] == "fail") || ($row['item_spf_result'] == "fail")) {
 		$status="orange";
-	} elseif (($row['dkimresult'] == "pass") && ($row['spfresult'] == "pass")) {
+	} elseif (($row['item_dkim_result'] == "pass") && ($row['item_spf_result'] == "pass")) {
 		$status="lime";
 	} else {
 		$status="yellow";
@@ -76,22 +77,22 @@ function tmpl_reportList($allowed_reports, $host_lookup = 1, $sort_order, $dom_s
 	foreach ($allowed_reports[BySerial] as $row) {
 		$row = array_map('htmlspecialchars', $row);
 		$date_output_format = "r";
-		$reportlist[] =  "    <tr" . ( $reportid == $row['serial'] ? " class='selected' " : "" ) . ">";
+		$reportlist[] =  "    <tr" . ( $reportid == $row['report_id'] ? " class='selected' " : "" ) . ">";
 		$reportlist[] =  "      <td class='right'><span class=\"circle_".get_status_color($row)."\"></span></td>";
-		$reportlist[] =  "      <td class='right'>". format_date($row['mindate'], $date_output_format). "</td>";
-		$reportlist[] =  "      <td class='right'>". format_date($row['maxdate'], $date_output_format). "</td>";
-		$reportlist[] =  "      <td class='center'>". $row['domain']. "</td>";
-		$reportlist[] =  "      <td class='center'>". $row['org']. "</td>";
-    $reportlist[] =  "      <td class='center'><a href='?report=" . $row['serial']
-      . ( $host_lookup ? "&hostlookup=1" : "&hostlookup=0" ) 
-      . ( $sort_order ? "&sortorder=1" : "&sortorder=0" ) 
-      . ($dom_select == '' ? '' : "&d=" . urlencode($dom_select)) 
-      . ($org_select == '' ? '' : "&o=" . urlencode($org_select)) 
-      . ($per_select == '' ? "&p=all" : "&p=" . urlencode($per_select)) 
-      . "#rpt". $row['serial'] . "'>". $row['reportid']. "</a></td>";
-		$reportlist[] =  "      <td class='center'>". number_format($row['rcount']+0,0). "</td>";
+		$reportlist[] =  "      <td class='right'>". format_date($row['report_begin_date'], $date_output_format). "</td>";
+		$reportlist[] =  "      <td class='right'>". format_date($row['report_end_date'], $date_output_format). "</td>";
+		$reportlist[] =  "      <td class='center'>". $row['report_domain']. "</td>";
+		$reportlist[] =  "      <td class='center'>". $row['report_org_name']. "</td>";
+		$reportlist[] =  "      <td class='center'><a href='?report=" . $row['report_id']
+			. ( $host_lookup ? "&hostlookup=1" : "&hostlookup=0" )
+			. ( $sort_order ? "&sortorder=1" : "&sortorder=0" )
+			. ($dom_select == '' ? '' : "&d=" . urlencode($dom_select))
+			. ($org_select == '' ? '' : "&o=" . urlencode($org_select))
+			. ($per_select == '' ? "&p=all" : "&p=" . urlencode($per_select))
+			. "#rpt". $row['report_id'] . "'>". $row['report_id']. "</a></td>";
+		$reportlist[] =  "      <td class='center'>". number_format($row['item_count']+0,0). "</td>";
 		$reportlist[] =  "    </tr>";
-		$reportsum += $row['rcount'];
+		$reportsum += $row['item_count'];
 	}
 	$reportlist[] = "<tr class='sum'><td></td><td></td><td></td><td></td><td class='right'>Sum:</td><td class='center'>".number_format($reportsum,0)."</td></tr>";
 	$reportlist[] =  "  </tbody>";
@@ -119,7 +120,7 @@ function tmpl_reportData($reportnumber, $allowed_reports, $host_lookup = 1, $sor
 		$row = $allowed_reports[BySerial][$reportnumber];
 		$row = array_map('htmlspecialchars', $row);
 		$reportdata[] = "<a id='rpt".$reportnumber."'></a>";
-		$reportdata[] = "<div class='center reportdesc'><p> Report from ".$row['org']." for ".$row['domain']."<br>(". format_date($row['mindate'], "r" ). " - ".format_date($row['maxdate'], "r" ).")<br> Policies: adkim=" . $row['policy_adkim'] . ", aspf=" . $row['policy_aspf'] .  ", p=" . $row['policy_p'] .  ", sp=" . $row['policy_sp'] .  ", pct=" . $row['policy_pct'] . "</p></div>";
+		$reportdata[] = "<div class='center reportdesc'><p> Report from ".$row['report_org_name']." for ".$row['report_domain']."<br>(". format_date($row['report_begin_date'], "r" ). " - ".format_date($row['report_end_date'], "r" ).")<br> Policies: adkim=" . $row['report_policy_adkim'] . ", aspf=" . $row['report_policy_aspf'] .  ", p=" . $row['report_policy_p'] .  ", sp=" . $row['report_policy_sp'] .  ", pct=" . $row['report_policy_pct'] . "</p></div>";
 	} else {
 		return "Unknown report number!";
 	}
@@ -141,20 +142,24 @@ function tmpl_reportData($reportnumber, $allowed_reports, $host_lookup = 1, $sor
 
 	$reportdata[] = "  <tbody>";
 
-	global $mysqli;
-	$sql = "SELECT * FROM rptrecord where serial = $reportnumber";
-	$query = $mysqli->query($sql) or die("Query failed: ".$mysqli->error." (Error #" .$mysqli->errno.")");
-	while($row = $query->fetch_assoc()) {
+	global $db;
+	$sql = "SELECT * FROM item where item_report_id = '$reportnumber'";
+
+        try {
+          $query = $db->query($sql);
+          if ($query === false) {
+            die("Error executing the query: " . $sql);
+          }
+         } catch (PDOException $e) {
+           die($e->getMessage());
+         }
+
+         while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+
 		$status = get_status_color($row);
 
-		if ( $row['ip'] ) {
-			$ip = long2ip($row['ip']);
-		} elseif ( $row['ip6'] ) {
-			$ip = inet_ntop($row['ip6']);
-		} else {
-      		$ip = "-";
-		}
-		
+		$ip = $row['item_ip'];
+
 		/* escape html characters after exploring binary values, which will be messed up */
 		$row = array_map('htmlspecialchars', $row);
 
@@ -165,16 +170,16 @@ function tmpl_reportData($reportnumber, $allowed_reports, $host_lookup = 1, $sor
 		} else {
 			$reportdata[] = "      <td>#off#</td>";
 		}
-		$reportdata[] = "      <td>". $row['rcount']. "</td>";
-		$reportdata[] = "      <td>". $row['disposition']. "</td>";
-		$reportdata[] = "      <td>". $row['reason']. "</td>";
-		$reportdata[] = "      <td>". $row['dkimdomain']. "</td>";
-		$reportdata[] = "      <td>". $row['dkimresult']. "</td>";
-		$reportdata[] = "      <td>". $row['spfdomain']. "</td>";
-		$reportdata[] = "      <td>". $row['spfresult']. "</td>";
+		$reportdata[] = "      <td>". $row['item_count']. "</td>";
+		$reportdata[] = "      <td>". $row['item_disposition']. "</td>";
+		$reportdata[] = "      <td>". $row['item_reason']. "</td>";
+		$reportdata[] = "      <td>". $row['item_dkim_domain']. "</td>";
+		$reportdata[] = "      <td>". $row['item_dkim_result']. "</td>";
+		$reportdata[] = "      <td>". $row['item_spf_domain']. "</td>";
+		$reportdata[] = "      <td>". $row['item_spf_result']. "</td>";
 		$reportdata[] = "    </tr>";
 
-		$reportsum += $row['rcount'];
+		$reportsum += $row['item_count'];
 	}
 	$reportdata[] = "<tr><td></td><td></td><td>$reportsum</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>";
 	$reportdata[] = "  </tbody>";
@@ -210,23 +215,23 @@ function tmpl_page ($body, $reportid, $host_lookup = 1, $sort_order, $dom_select
 	$html[] = "  </head>";
 
 	$html[] = "  <body>";
-	
-	
+
+
   # optionblock form
   #--------------------------------------------------------------------------
 	$html[] = "    <div class='optionblock'><form action=\"?\" method=\"post\">";
-	
-	
+
+
   # handle host lookup (on/off should not reset selected report)
   #--------------------------------------------------------------------------
-  $html[] = "<div class='options'><span class='optionlabel'>Hostname(s):</span> <input type=\"radio\" name=\"selHostLookup\" value=\"1\" onchange=\"this.form.submit()\"" . ($host_lookup ? " checked=\"checked\"" : "" ) . "> on<input type=\"radio\" name=\"selHostLookup\" value=\"0\" onchange=\"this.form.submit()\"" . ($host_lookup ? "" : " checked=\"checked\"" ) . "> off</div>";	
-  
-  
+  $html[] = "<div class='options'><span class='optionlabel'>Hostname(s):</span> <input type=\"radio\" name=\"selHostLookup\" value=\"1\" onchange=\"this.form.submit()\"" . ($host_lookup ? " checked=\"checked\"" : "" ) . "> on<input type=\"radio\" name=\"selHostLookup\" value=\"0\" onchange=\"this.form.submit()\"" . ($host_lookup ? "" : " checked=\"checked\"" ) . "> off</div>";
+
+
   # handle sort direction
   #--------------------------------------------------------------------------
-  $html[] = "<div class='options'><span class='optionlabel'>Sort order:</span> <input type=\"radio\" name=\"selOrder\" value=\"1\" onchange=\"this.form.submit()\"" . ($sort_order ? " checked=\"checked\"" : "" ) . "> ascending<input type=\"radio\" name=\"selOrder\" value=\"0\" onchange=\"this.form.submit()\"" . ($sort_order ? "" : " checked=\"checked\"" ) . "> decending</div>";	
-  
-  
+  $html[] = "<div class='options'><span class='optionlabel'>Sort order:</span> <input type=\"radio\" name=\"selOrder\" value=\"1\" onchange=\"this.form.submit()\"" . ($sort_order ? " checked=\"checked\"" : "" ) . "> ascending<input type=\"radio\" name=\"selOrder\" value=\"0\" onchange=\"this.form.submit()\"" . ($sort_order ? "" : " checked=\"checked\"" ) . "> decending</div>";
+
+
   # handle domains
   #--------------------------------------------------------------------------
   if ( count( $domains ) > 1 ) {
@@ -269,8 +274,8 @@ function tmpl_page ($body, $reportid, $host_lookup = 1, $sort_order, $dom_select
     $html[] = "</select>";
   }
   $html[] = "</div>";
-  
-  
+
+
   #--------------------------------------------------------------------------
   # handle period
   #--------------------------------------------------------------------------
@@ -292,18 +297,18 @@ function tmpl_page ($body, $reportid, $host_lookup = 1, $sort_order, $dom_select
     $html[] = "</select>";
   }
   $html[] = "</div>";
-  
-  
+
+
   # end optionblock
   #--------------------------------------------------------------------------
-  $html[] = "</form></div>";   
+  $html[] = "</form></div>";
 
-  
+
   # add body
   #--------------------------------------------------------------------------
   $html[] = $body;
 
-  
+
   # footter
   #--------------------------------------------------------------------------
 	$html[] = "  <div class='footer'>Brought to you by <a href='http://www.techsneeze.com'>TechSneeze.com</a> - <a href='mailto:dave@techsneeze.com'>dave@techsneeze.com</a></div>";
@@ -395,13 +400,24 @@ if( $per_select == "all" ) {
 
 // Make a MySQL Connection using mysqli
 // --------------------------------------------------------------------------
-$mysqli = new mysqli($dbhost, $dbuser, $dbpass, $dbname, $dbport);
-if ($mysqli->connect_errno) {
-	echo "Error: Failed to make a MySQL connection, here is why: \n";
-	echo "Errno: " . $mysqli->connect_errno . "\n";
-	echo "Error: " . $mysqli->connect_error . "\n";
-	exit;
+//$mysqli = new mysqli($dbhost, $dbuser, $dbpass, $dbname, $dbport);
+// if ($mysqli->connect_errno) {
+// 	echo "Error: Failed to make a MySQL connection, here is why: \n";
+// 	echo "Errno: " . $mysqli->connect_errno . "\n";
+// 	echo "Error: " . $mysqli->connect_error . "\n";
+// 	exit;
+// }
+
+$dsn = "pgsql:host=$dbhost;port=$dbport;dbname=$dbname;user=$dbuser;password=$dbpass";
+
+try{
+  // create a PostgreSQL database connection
+  $db = new PDO($dsn);
+} catch (PDOException $e) {
+  // report error message
+  die($e->getMessage());
 }
+
 
 define("BySerial", 1);
 define("ByDomain", 2);
@@ -409,41 +425,68 @@ define("ByOrganisation", 3);
 
 // get all domains reported
 // --------------------------------------------------------------------------
-$sql="SELECT DISTINCT domain FROM `report` ORDER BY domain";
-$domains= array();
-$query = $mysqli->query($sql) or die("Query failed: ".$mysqli->error." (Error #" .$mysqli->errno.")");
-while($row = $query->fetch_assoc()) {
-  $domains[] = $row['domain'];
+$sql="SELECT DISTINCT report_domain FROM report ORDER BY report_domain";
+$domains = array();
+try {
+  $query = $db->query($sql);
+  if ($query === false) {
+    die("Error executing the query: " . $sql);
+  }
+} catch (PDOException $e) {
+  // report error message
+  die($e->getMessage());
+}
+
+while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+  $domains[] = $row['report_domain'];
 }
 if( $dom_select <> '' && array_search($dom_select, $domains) === FALSE ) {
   $dom_select = '';
 }
 if( $dom_select <> '' ) {
-  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " domain='" . $mysqli->real_escape_string($dom_select) . "'";
-} 
+  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " report_domain='" . $mysqli->real_escape_string($dom_select) . "'";
+}
 
 // get organisations
 // --------------------------------------------------------------------------
-$sql="SELECT DISTINCT org FROM `report`" . ($dom_select == '' ? "" : "WHERE `domain`='" . $mysqli->real_escape_string($dom_select). "'" ) . " ORDER BY org";
+$sql="SELECT DISTINCT report_org_name FROM report" . ($dom_select == '' ? "" : "WHERE report_domain='" . $mysqli->real_escape_string($dom_select). "'" ) . " ORDER BY report_org_name";
 $orgs= array();
-$query = $mysqli->query($sql) or die("Query failed: ".$mysqli->error." (Error #" .$mysqli->errno.")");
-while($row = $query->fetch_assoc()) {
-  $orgs[] = $row['org'];
+try {
+  $query = $db->query($sql);
+  if ($query === false) {
+    die("Error executing the query: " . $sql);
+  }
+} catch (PDOException $e) {
+  // report error message
+  die($e->getMessage());
+}
+
+while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+  $orgs[] = $row['report_org_name'];
 }
 if( $org_select <> '' && array_search($org_select, $orgs) === FALSE ) {
   $org_select = '';
 }
 if( $org_select <> '' ) {
-  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " org='" . $mysqli->real_escape_string($org_select) . "'";
-
-} 
+  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " report_org_name='" . $mysqli->real_escape_string($org_select) . "'";
+}
 
 // get period
 // --------------------------------------------------------------------------
-$sql="SELECT DISTINCT DISTINCT year(mindate) as year, month(mindate) as month FROM `report` $where ORDER BY year desc,month desc";
+$sql="SELECT DISTINCT extract(year from report_begin_date) as year, extract(month from report_begin_date) as month FROM report $where ORDER BY year desc, month desc";
 $periods= array();
-$query = $mysqli->query($sql) or die("Query failed: ".$mysqli->error." (Error #" .$mysqli->errno.")");
-while($row = $query->fetch_assoc()) {
+
+try {
+  $query = $db->query($sql);
+  if ($query === false) {
+    die("Error executing the query: " . $sql);
+  }
+} catch (PDOException $e) {
+  // report error message
+  die($e->getMessage());
+}
+
+while($row = $query->fetch(PDO::FETCH_ASSOC)) {
   $periods[] = sprintf( "%'.04d-%'.02d", $row['year'], $row['month'] );
 }
 if( $per_select <> '' && array_search($per_select, $periods) === FALSE ) {
@@ -452,9 +495,9 @@ if( $per_select <> '' && array_search($per_select, $periods) === FALSE ) {
 if( $per_select <> '' ) {
   $ye = substr( $per_select, 0, 4) + 0;
   $mo = substr( $per_select, 5, 2) + 0;
-  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " year(mindate)=$ye and month(mindate) =$mo ";
+  $where .= ( $where <> '' ? " AND" : " WHERE" ) . " extract(year from report_begin_date)=$ye and extract(month from report_begin_date)=$mo ";
 
-} 
+}
 
 // Get allowed reports and cache them - using serial as key
 // --------------------------------------------------------------------------
@@ -469,23 +512,46 @@ if( $sortorder ) {
   $sort = "DESC";
 }
 
-// Include the rcount via left join, so we do not have to make an sql query 
+// Include the rcount via left join, so we do not have to make an sql query
 // for every single report.
 // --------------------------------------------------------------------------
-$sql = "SELECT report.* , sum(rptrecord.rcount) AS rcount, MIN(rptrecord.dkimresult) AS dkimresult, MIN(rptrecord.spfresult) AS spfresult FROM report LEFT JOIN (SELECT rcount, COALESCE(dkimresult, 'neutral') AS dkimresult, COALESCE(spfresult, 'neutral') AS spfresult, serial FROM rptrecord) AS rptrecord ON report.serial = rptrecord.serial $where GROUP BY serial ORDER BY mindate $sort, maxdate $sort , org";
+$sql = "
+  SELECT report.*,
+    SUM(item.item_count) AS item_count,
+    MIN(item.dkim_result) AS item_dkim_result,
+    MIN(item.spf_result) AS item_spf_result
+  FROM report
+  LEFT JOIN (
+    SELECT item_count,
+      COALESCE(item_dkim_result, 'neutral') AS dkim_result,
+      COALESCE(item_spf_result, 'neutral') AS spf_result,
+      item_report_id
+    FROM item)
+  AS item
+  ON report.report_id = item.item_report_id
+  $where GROUP BY report_id ORDER BY report_begin_date $sort, report_end_date $sort, report_org_name";
 
 // Debug
 //echo "sql reports = $sql";
 
-$query = $mysqli->query($sql) or die("Query failed: ".$mysqli->error." (Error #" .$mysqli->errno.")");
-while($row = $query->fetch_assoc()) {
+try {
+  $query = $db->query($sql);
+  if ($query === false) {
+    die("Error executing the query: " . $sql);
+  }
+} catch (PDOException $e) {
+  // report error message
+  die($e->getMessage());
+}
+
+while($row = $query->fetch(PDO::FETCH_ASSOC)) {
 	//todo: check ACL if this row is allowed
 	if (true) {
-		//add data by serial
-		$allowed_reports[BySerial][$row['serial']] = $row;
+		//add data by report_id
+		$allowed_reports[BySerial][$row['report_id']] = $row;
 		//make a list of serials by domain and by organisation
-		//$allowed_reports[ByDomain][$row['domain']][] = $row['serial'];
-		//$allowed_reports[ByOrganisation][$row['org']][] = $row['serial'];
+		//$allowed_reports[ByDomain][$row['report_domain']][] = $row['report_id'];
+		//$allowed_reports[ByOrganisation][$row['report_org_name']][] = $row['report_id'];
 	}
 }
 
