@@ -332,8 +332,9 @@ $per_select= '';
 $where = '';
 
 if(!isset($dbport)) {
-  $dbport="3306";
+  $dbport="5432";
 }
+
 if(!isset($cssfile)) {
   $cssfile="default.css";
 }
@@ -397,16 +398,6 @@ if( $per_select == "all" ) {
 }
 // Debug
 //echo "D=$dom_select <br /> O=$org_select <br />";
-
-// Make a MySQL Connection using mysqli
-// --------------------------------------------------------------------------
-//$mysqli = new mysqli($dbhost, $dbuser, $dbpass, $dbname, $dbport);
-// if ($mysqli->connect_errno) {
-// 	echo "Error: Failed to make a MySQL connection, here is why: \n";
-// 	echo "Errno: " . $mysqli->connect_errno . "\n";
-// 	echo "Error: " . $mysqli->connect_error . "\n";
-// 	exit;
-// }
 
 $dsn = "pgsql:host=$dbhost;port=$dbport;dbname=$dbname;user=$dbuser;password=$dbpass";
 
