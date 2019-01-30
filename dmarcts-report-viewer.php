@@ -341,8 +341,8 @@ if(!isset($cssfile)) {
 
 // parameters of by GET / POST - POST has priority
 // --------------------------------------------------------------------------
-if(isset($_GET['report']) && is_numeric($_GET['report'])){
-  $reportid=$_GET['report']+0;
+if(isset($_GET['report'])) {
+  $reportid=$_GET['report'];
 }elseif(!isset($_GET['report'])){
   $reportid=false;
 }else{
